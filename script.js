@@ -9,6 +9,8 @@ const player = {
     height: 50,
     color: 'green',
     speed: 5,
+    shootCooldown: 500, // ms
+    lastShotTime: 0
 };
 
 // Bullets
@@ -34,6 +36,7 @@ const invaderCols = 10;
 // Game state
 let score = 0;
 let gameOver = false;
+let wave = 1;
 
 //- Event Listeners
 let rightPressed = false;
@@ -63,7 +66,11 @@ function keyUpHandler(e) {
     }
 }
 
-function createInvaders() {
+function createInvaders(wave) {
+    invaders = []; // Clear existing invaders
+    const health = wave;
+    const color = wave === 1 ? 'red' : 'orange';
+
     for (let c = 0; c < invaderCols; c++) {
         for (let r = 0; r < invaderRows; r++) {
             invaders.push({
@@ -71,8 +78,10 @@ function createInvaders() {
                 y: r * (invader.height + 10) + 30,
                 width: invader.width,
                 height: invader.height,
-                color: invader.color,
-                speed: invader.speed
+                speed: invader.speed * wave, // Make them faster too
+                health: health,
+                initialHealth: health,
+                color: color
             });
         }
     }
@@ -98,10 +107,13 @@ function drawInvaders() {
 }
 
 // Power-ups
+const powerUpTypes = {
+    SPEED_BOOST: { color: 'cyan', type: 'SPEED_BOOST' },
+    RAPID_FIRE: { color: 'yellow', type: 'RAPID_FIRE' },
+};
 const powerUp = {
     width: 15,
     height: 15,
-    color: 'cyan',
     speed: 3
 };
 let powerUps = [];
@@ -117,6 +129,7 @@ function drawScore() {
     ctx.font = '20px Arial';
     ctx.fillStyle = 'white';
     ctx.fillText('Score: ' + score, 10, 20);
+    ctx.fillText('Wave: ' + wave, canvas.width - 100, 20);
 }
 
 function update() {
@@ -144,7 +157,9 @@ function update() {
     }
 
     // Shoot bullets
-    if (spacePressed) {
+    const now = Date.now();
+    if (spacePressed && now - player.lastShotTime > player.shootCooldown) {
+        player.lastShotTime = now;
         bullets.push({
             x: player.x + player.width / 2 - bullet.width / 2,
             y: player.y,
@@ -153,7 +168,6 @@ function update() {
             color: bullet.color,
             speed: bullet.speed
         });
-        spacePressed = false; // prevent multiple bullets from being fired at once
     }
 
     // Move bullets
@@ -193,10 +207,16 @@ function update() {
                 bullets[i].y > invaders[j].y &&
                 bullets[i].y < invaders[j].y + invaders[j].height
             ) {
-                // Mark for removal
                 bulletsToRemove.push(i);
-                invadersToRemove.push({ index: j, x: invaders[j].x, y: invaders[j].y });
-                score += 10;
+                invaders[j].health--;
+
+                if (invaders[j].health <= 0) {
+                    // Mark for removal
+                    invadersToRemove.push({ index: j, x: invaders[j].x, y: invaders[j].y });
+                    score += 10 * invaders[j].initialHealth; // More points for tougher enemies
+                } else {
+                    invaders[j].color = 'red'; // Show damage
+                }
 
                 break; // This bullet has hit an invader, check the next bullet
             }
@@ -209,13 +229,17 @@ function update() {
         invaders.splice(inv.index, 1);
         // Chance to drop a power-up
         if (Math.random() < 0.2) { // 20% chance
+            const typeKeys = Object.keys(powerUpTypes);
+            const randomTypeKey = typeKeys[Math.floor(Math.random() * typeKeys.length)];
+            const type = powerUpTypes[randomTypeKey];
+
             powerUps.push({
                 x: inv.x + invader.width / 2 - powerUp.width / 2,
                 y: inv.y,
                 width: powerUp.width,
                 height: powerUp.height,
-                color: powerUp.color,
-                speed: powerUp.speed
+                speed: powerUp.speed,
+                ...type
             });
         }
     });
@@ -233,7 +257,15 @@ function update() {
             pu.y < player.y + player.height &&
             pu.y + pu.height > player.y
         ) {
-            player.speed += 2; // Apply power-up effect
+            // Apply power-up effect based on type
+            switch (pu.type) {
+                case 'SPEED_BOOST':
+                    player.speed += 2;
+                    break;
+                case 'RAPID_FIRE':
+                    player.shootCooldown = Math.max(100, player.shootCooldown - 100);
+                    break;
+            }
             powerUps.splice(i, 1); // Remove power-up
         }
 
@@ -252,17 +284,22 @@ function update() {
     }
 
     if (invaders.length === 0) {
-        // You win!
-        ctx.font = '50px Arial';
-        ctx.fillStyle = 'white';
-        ctx.textAlign = 'center';
-        ctx.fillText('YOU WIN!', canvas.width / 2, canvas.height / 2);
-        gameOver = true;
-        return;
+        if (wave >= 2) {
+            // You win!
+            ctx.font = '50px Arial';
+            ctx.fillStyle = 'white';
+            ctx.textAlign = 'center';
+            ctx.fillText('YOU WIN!', canvas.width / 2, canvas.height / 2);
+            gameOver = true;
+            return;
+        } else {
+            wave++;
+            createInvaders(wave);
+        }
     }
 
     requestAnimationFrame(update);
 }
 
-createInvaders();
+createInvaders(wave);
 update();
