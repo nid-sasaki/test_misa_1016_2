@@ -97,6 +97,22 @@ function drawInvaders() {
     }
 }
 
+// Power-ups
+const powerUp = {
+    width: 15,
+    height: 15,
+    color: 'cyan',
+    speed: 3
+};
+let powerUps = [];
+
+function drawPowerUps() {
+    for (let i = 0; i < powerUps.length; i++) {
+        ctx.fillStyle = powerUps[i].color;
+        ctx.fillRect(powerUps[i].x, powerUps[i].y, powerUps[i].width, powerUps[i].height);
+    }
+}
+
 function drawScore() {
     ctx.font = '20px Arial';
     ctx.fillStyle = 'white';
@@ -117,6 +133,7 @@ function update() {
     drawPlayer();
     drawBullets();
     drawInvaders();
+    drawPowerUps();
     drawScore();
 
     // Move player
@@ -165,6 +182,9 @@ function update() {
     }
 
     // Collision detection
+    let bulletsToRemove = [];
+    let invadersToRemove = [];
+
     for (let i = 0; i < bullets.length; i++) {
         for (let j = 0; j < invaders.length; j++) {
             if (
@@ -173,12 +193,53 @@ function update() {
                 bullets[i].y > invaders[j].y &&
                 bullets[i].y < invaders[j].y + invaders[j].height
             ) {
-                bullets.splice(i, 1);
-                i--;
-                invaders.splice(j, 1);
+                // Mark for removal
+                bulletsToRemove.push(i);
+                invadersToRemove.push({ index: j, x: invaders[j].x, y: invaders[j].y });
                 score += 10;
-                break; // exit inner loop
+
+                break; // This bullet has hit an invader, check the next bullet
             }
+        }
+    }
+
+    // Remove invaders and bullets that have collided
+    // Sort in descending order to avoid index shifting issues
+    invadersToRemove.sort((a, b) => b.index - a.index).forEach(inv => {
+        invaders.splice(inv.index, 1);
+        // Chance to drop a power-up
+        if (Math.random() < 0.2) { // 20% chance
+            powerUps.push({
+                x: inv.x + invader.width / 2 - powerUp.width / 2,
+                y: inv.y,
+                width: powerUp.width,
+                height: powerUp.height,
+                color: powerUp.color,
+                speed: powerUp.speed
+            });
+        }
+    });
+    bulletsToRemove.sort((a, b) => b - a).forEach(index => bullets.splice(index, 1));
+
+    // Update and draw power-ups
+    for (let i = powerUps.length - 1; i >= 0; i--) {
+        const pu = powerUps[i];
+        pu.y += pu.speed;
+
+        // Check for collision with player
+        if (
+            pu.x < player.x + player.width &&
+            pu.x + pu.width > player.x &&
+            pu.y < player.y + player.height &&
+            pu.y + pu.height > player.y
+        ) {
+            player.speed += 2; // Apply power-up effect
+            powerUps.splice(i, 1); // Remove power-up
+        }
+
+        // Remove power-up if it goes off-screen
+        if (pu.y > canvas.height) {
+            powerUps.splice(i, 1);
         }
     }
 
@@ -197,6 +258,7 @@ function update() {
         ctx.textAlign = 'center';
         ctx.fillText('YOU WIN!', canvas.width / 2, canvas.height / 2);
         gameOver = true;
+        return;
     }
 
     requestAnimationFrame(update);
